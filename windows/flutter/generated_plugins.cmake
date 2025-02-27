@@ -3,6 +3,10 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  bitsdojo_window_windows
+  flutter_platform_alert
+  system_tray
+  window_size
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
