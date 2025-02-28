@@ -17,25 +17,36 @@ class EmployeeScreen extends StatefulWidget {
 class _EmployeeScreenState extends State<EmployeeScreen> {
   PagingState<int, Employee> _pagingState = PagingState();
 
-  void fetchNextPage() async {
-    if (_pagingState.isLoading) return;
-    await Future.value();
+  late final _pagingController = PagingController<int, Employee>(
+    getNextPageKey: (state) => (state.keys?.last ?? 0) + 1,
+    fetchPage: (pageKey) => context.read<ExcelImportCubit>().getAllEmployee(),
+  );
 
-    setState(() {
-      _pagingState = _pagingState.copyWith(isLoading: true, error: null);
-    });
+  // void fetchNextPage() async {
+  //   if (_pagingState.isLoading) return;
+  //   await Future.value();
 
-    try {
-      final newKey = (_pagingState.keys?.last ?? 0) + 1;
-      await context.read<ExcelImportCubit>().loadMore(newKey);
-    } catch (error) {
-      setState(() {
-        _pagingState = _pagingState.copyWith(
-          error: error,
-          isLoading: false,
-        );
-      });
-    }
+  //   setState(() {
+  //     _pagingState = _pagingState.copyWith(isLoading: true, error: null);
+  //   });
+
+  //   try {
+  //     final newKey = (_pagingState.keys?.last ?? 0) + 1;
+  //     await context.read<ExcelImportCubit>().loadMore(newKey);
+  //   } catch (error) {
+  //     setState(() {
+  //       _pagingState = _pagingState.copyWith(
+  //         error: error,
+  //         isLoading: false,
+  //       );
+  //     });
+  //   }
+  // }
+
+  @override
+  void dispose() {
+    _pagingController.dispose();
+    super.dispose();
   }
 
   @override
@@ -63,43 +74,59 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
       body: BlocListener<ExcelImportCubit, ExcelImportState>(
         listener: (context, state) {
           if (state is ExcelImportLoading) {
-            //
+            showDialog(
+              context: context,
+              builder: (context) => Center(
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    color: Colors.blue,
+                  ),
+                ),
+              ),
+            );
           }
           if (state is ExcelImportLoaded) {
-            if (state.isLastPage) {
-              setState(() {
-                _pagingState = _pagingState.copyWith(
-                  pages: [...?_pagingState.pages, state.employees],
-                  keys: [...?_pagingState.keys, state.nextPageKey ?? 0],
-                  hasNextPage: !state.isLastPage,
-                  isLoading: false,
-                );
-              });
-            } else {
-              //
-            }
+            // if (state.isLastPage) {
+            //   setState(() {
+            //     _pagingState = _pagingState.copyWith(
+            //       pages: [...?_pagingState.pages, state.employees],
+            //       keys: [...?_pagingState.keys, state.nextPageKey ?? 0],
+            //       hasNextPage: !state.isLastPage,
+            //       isLoading: false,
+            //     );
+            //   });
+            // } else {
+            //   //
+            // }
           } else if (state is ExcelDeleteSuccess) {
+            print('HELLO WORLD');
           } else if (state is ExcelSentSuccess) {
           } else {}
         },
-        child: PagedListView<int, Employee>(
-          state: _pagingState,
-          fetchNextPage: fetchNextPage,
-          builderDelegate: PagedChildBuilderDelegate<Employee>(
-            itemBuilder: (context, employee, index) => EmployeeListItem(
-              employee: employee,
-              index: index,
-              onEdit: () => _showEditDialog(context, employee),
-              onDelete: () =>
-                  context.read<ExcelImportCubit>().onDeteleData(employee),
-              onSend: () =>
-                  context.read<ExcelImportCubit>().onSendData(employee),
-            ),
-            noItemsFoundIndicatorBuilder: (_) => Center(
-              child: Text('Vui lòng chọn file Excel để bắt đầu'),
-            ),
-          ),
-        ),
+        child: PagingListener(
+            controller: _pagingController,
+            builder: (context, state, fetchNextPage) {
+              return PagedListView<int, Employee>(
+                state: state,
+                fetchNextPage: fetchNextPage,
+                builderDelegate: PagedChildBuilderDelegate<Employee>(
+                  itemBuilder: (context, employee, index) => EmployeeListItem(
+                    employee: employee,
+                    index: index,
+                    onEdit: () => _showEditDialog(context, employee),
+                    onDelete: () =>
+                        context.read<ExcelImportCubit>().onDeteleData(employee),
+                    onSend: () =>
+                        context.read<ExcelImportCubit>().onSendData(employee),
+                  ),
+                  noItemsFoundIndicatorBuilder: (_) => Center(
+                    child: Text('Vui lòng chọn file Excel để bắt đầu'),
+                  ),
+                ),
+              );
+            }),
       ),
     );
   }

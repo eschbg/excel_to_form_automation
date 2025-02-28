@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:read_excel/employee.dart';
 
 import 'employee_dialog.dart';
+import 'employee_list_item.dart';
 import 'utils.dart';
 
 class EmployeeTable extends StatefulWidget {
@@ -21,39 +22,39 @@ class EmployeeTable extends StatefulWidget {
   State<EmployeeTable> createState() => _EmployeeTableState();
 }
 
-class _EmployeeTableState extends State<EmployeeTable> {
+class _EmployeeTableState extends State<EmployeeTable>
+    with AutomaticKeepAliveClientMixin {
+  static const _itemsPerPage = 100;
+
+  final ValueNotifier<bool> _isLoading = ValueNotifier(false);
+  final ValueNotifier<int> _currentPage = ValueNotifier(0);
+
   final _urlFormKey = GlobalKey<FormState>();
   String? url;
 
-  List<Employee> employees = [];
+  final ValueNotifier<List<Employee>> _employeesNotifier = ValueNotifier([]);
+  final ValueNotifier<List<Employee>> _employeesDisplayNotifier =
+      ValueNotifier([]);
+
   final TextEditingController _searchController = TextEditingController();
   Timer? _scheduledTask;
+  Timer? _searchDebounce;
 
-  final controller = StreamController<Employee>();
+  final _scrollController = ScrollController();
 
   static Future<List<Employee>> _parseExcelInBackground(List<int> bytes) async {
     final excel = Excel.decodeBytes(bytes);
     List<Employee> employees = [];
-    int processedCount = 0;
 
     for (var table in excel.tables.keys) {
       var sheet = excel.tables[table]!;
-      final totalRows = sheet.rows.length;
-
-      for (int i = 1; i < totalRows; i += 100) {
-        final end = i + 100 < totalRows ? i + 100 : totalRows;
-        final chunk = sheet.rows.skip(i).take(100);
-        for (var row in chunk) {
-          employees.add(Employee(
-            id: row[0]?.value.toString() ?? '',
-            name: row[1]?.value.toString() ?? '',
-            email: row[2]?.value.toString() ?? '',
-            position: row[3]?.value.toString() ?? '',
-          ));
-        }
-        processedCount += chunk.length;
-        debugPrint('Đã xử lý $processedCount/$totalRows dòng');
-        await Future.delayed(Duration(milliseconds: 50)); // Giảm tải UI
+      for (var row in sheet.rows.skip(1)) {
+        employees.add(Employee(
+          id: row[0]?.value.toString() ?? '',
+          name: row[1]?.value.toString() ?? '',
+          email: row[2]?.value.toString() ?? '',
+          position: row[3]?.value.toString() ?? '',
+        ));
       }
     }
     return employees;
@@ -75,12 +76,48 @@ class _EmployeeTableState extends State<EmployeeTable> {
     return await compute(_parseExcelInBackground, bytes);
   }
 
+  Future<void> _loadMoreData() async {
+    if (_isLoading.value ||
+        _employeesDisplayNotifier.value.length >=
+            _employeesNotifier.value.length) {
+      return;
+    }
+
+    final sourceList = _searchController.text.isNotEmpty
+        ? _filteredEmployees
+        : _employeesNotifier.value;
+
+    _isLoading.value = true;
+
+    await Future.delayed(Duration(seconds: 1)); // Giả lập delay
+
+    int startIndex = _currentPage.value * _itemsPerPage;
+    int endIndex = startIndex + _itemsPerPage;
+
+    if (startIndex < sourceList.length) {
+      List<Employee> newData = sourceList.sublist(
+        startIndex,
+        endIndex > sourceList.length ? sourceList.length : endIndex,
+      );
+      _isLoading.value = false;
+      _currentPage.value++;
+      _employeesDisplayNotifier.value.addAll(newData);
+    }
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      _loadMoreData();
+    }
+  }
+
   Future<void> uploadExcel() async {
+    _isLoading.value = true;
     final newEmployees = await readExcelFile();
-    setState(() {
-      employees.clear();
-      employees.addAll(newEmployees);
-    });
+    _employeesNotifier.value.clear();
+    _employeesNotifier.value = newEmployees;
+    _isLoading.value = false;
   }
 
   Future<void> exportToExcel(List<Employee> employees) async {
@@ -91,7 +128,7 @@ class _EmployeeTableState extends State<EmployeeTable> {
     sheet.appendRow(['ID', 'Họ tên', 'Email', 'Chức vụ', 'Đã gửi']);
 
     // Thêm dữ liệu
-    for (var employee in employees) {
+    for (var employee in _employeesNotifier.value) {
       sheet.appendRow([
         employee.id,
         employee.name,
@@ -128,22 +165,25 @@ class _EmployeeTableState extends State<EmployeeTable> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_scrollListener);
     _scheduleDailyTask();
   }
 
   @override
   void dispose() {
     super.dispose();
+    _searchDebounce?.cancel();
     _scheduledTask?.cancel();
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Quản lý nhân viên'),
+        title: Text('Quản lý đồng bộ nhân viên'.toUpperCase()),
         actions: [
           iconAction(
             'Import',
@@ -157,118 +197,146 @@ class _EmployeeTableState extends State<EmployeeTable> {
           iconAction(
             'Export',
             Icon(Icons.download, color: Colors.blue),
-            () => exportToExcel(employees),
+            () => exportToExcel(_employeesNotifier.value),
           ),
+          SizedBox(width: 10),
         ],
       ),
       body: Center(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Stack(
           children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: size.width * 0.6,
-                minWidth: size.width * 0.4,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      _editUrl((value) => setState(() => url = value));
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Container(
-                        padding: const EdgeInsets.only(right: 8.0, bottom: 8),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.black,
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                url != null && url!.trim().isNotEmpty
-                                    ? url!
-                                    : 'Nhập URL',
-                                style: TextStyle(fontSize: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: size.width * 0.6,
+                    minWidth: size.width * 0.4,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          _editUrl((value) => setState(() => url = value));
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.only(right: 8.0, bottom: 8),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.black,
+                                  width: 1,
+                                ),
                               ),
                             ),
-                            SizedBox(width: 20),
-                            Icon(
-                              Icons.save,
-                              color: Colors.blueAccent,
-                            )
-                          ],
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    url != null && url!.trim().isNotEmpty
+                                        ? url!
+                                        : 'Nhập URL',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                ),
+                                SizedBox(width: 20),
+                                Icon(
+                                  Icons.save,
+                                  color: Colors.blueAccent,
+                                )
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        labelText: 'Tìm kiếm',
-                        suffixIcon: Icon(Icons.search),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            labelText: 'Tìm kiếm',
+                            suffixIcon: Icon(Icons.search),
+                          ),
+                          onChanged: (value) {
+                            if (_searchDebounce?.isActive ?? false) {
+                              _searchDebounce!.cancel();
+                            }
+                            _searchDebounce =
+                                Timer(const Duration(milliseconds: 300), () {
+                              setState(() {});
+                            });
+                          },
+                        ),
                       ),
-                      onChanged: (value) => setState(() {}),
+                    ],
+                  ),
+                ),
+                Container(
+                  color: Color(0xFF4D4C7D),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        flex: 1,
+                        child: _labelTable('STT'),
+                      ),
+                      Flexible(
+                        flex: 3,
+                        child: _labelTable('Họ Tên'),
+                      ),
+                      Flexible(
+                        flex: 1,
+                        child: _labelTable('Positioned'),
+                      ),
+                      Flexible(
+                        flex: 2,
+                        child: _labelTable('Action'),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ValueListenableBuilder(
+                    valueListenable: _employeesNotifier,
+                    builder: (context, value, child) => ListView.builder(
+                      itemCount: _filteredEmployees.length,
+                      itemBuilder: (context, index) {
+                        final employee = _filteredEmployees[index];
+                        return Container(
+                          padding: EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            border: Border(
+                                bottom: BorderSide(color: Color(0xFFEAEAEA))),
+                          ),
+                          child: EmployeeListItem(
+                            employee: employee,
+                            index: index,
+                            onEdit: () => _editEmployee(employee),
+                            onDelete: () => _deleteEmployee(employee),
+                            onSend: () => _sendToServer(employee),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('ID')),
-                    DataColumn(label: Text('Họ tên')),
-                    DataColumn(label: Text('Email')),
-                    DataColumn(label: Text('Chức vụ')),
-                    DataColumn(label: Text('Trạng thái')),
-                    DataColumn(label: Text('Thao tác')),
-                  ],
-                  rows: _filteredEmployees.map((employee) {
-                    return DataRow(cells: [
-                      DataCell(Text(employee.id)),
-                      DataCell(Text(employee.name)),
-                      DataCell(Text(employee.email)),
-                      DataCell(Text(employee.position)),
-                      DataCell(
-                        employee.isSent
-                            ? Icon(Icons.check_circle, color: Colors.green)
-                            : Icon(Icons.error, color: Colors.orange),
-                      ),
-                      DataCell(Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.edit),
-                            onPressed: () => _editEmployee(employee),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete),
-                            color: Colors.red,
-                            onPressed: () => _deleteEmployee(employee),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.send),
-                            color: Colors.blue,
-                            onPressed: () => _sendToServer(employee),
-                          ),
-                        ],
-                      )),
-                    ]);
-                  }).toList(),
+            if (_isLoading.value)
+              Center(
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    color: Colors.blue,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -303,7 +371,22 @@ class _EmployeeTableState extends State<EmployeeTable> {
     );
   }
 
-  List<Employee> get _filteredEmployees => employees
+  Widget _labelTable(String label) {
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  List<Employee> get _filteredEmployees => _employeesNotifier.value
       .where((employee) => employee.name
           .toLowerCase()
           .contains(_searchController.text.toLowerCase()))
@@ -317,8 +400,8 @@ class _EmployeeTableState extends State<EmployeeTable> {
         employee: employee,
         onSave: (updatedEmployee) {
           setState(() {
-            final index = employees.indexOf(employee);
-            employees[index] = updatedEmployee;
+            final index = _employeesNotifier.value.indexOf(employee);
+            _employeesNotifier.value[index] = updatedEmployee;
           });
         },
       ),
@@ -326,7 +409,7 @@ class _EmployeeTableState extends State<EmployeeTable> {
   }
 
   void _deleteEmployee(Employee employee) {
-    setState(() => employees.remove(employee));
+    setState(() => _employeesNotifier.value.remove(employee));
   }
 
   //Edit URL
@@ -391,4 +474,7 @@ class _EmployeeTableState extends State<EmployeeTable> {
       );
     }
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:equatable/equatable.dart';
@@ -21,6 +22,8 @@ class ExcelImportCubit extends Cubit<ExcelImportState> {
 
   ExcelImportCubit() : super(ExcelImportInitial());
 
+  List<Employee> getAllEmployee() => _allEmployees;
+
   Future<void> loadExcel() async {
     try {
       final file = await FilePicker.platform.pickFiles(
@@ -29,8 +32,13 @@ class ExcelImportCubit extends Cubit<ExcelImportState> {
       );
       if (file != null) {
         emit(ExcelImportLoading());
-        await _processFileInIsolate(file.files.single.bytes!);
-        loadMore(1);
+        print('PRE LOAD ALL ITEMS FROM EXCEL');
+
+        final data =
+            await compute(_parseExcelInBackground, file.files.single.bytes!);
+        _allEmployees.clear();
+        _allEmployees.addAll(data);
+        loadMore(0);
       }
     } catch (e) {
       emit(ExcelImportError(e.toString()));
@@ -74,34 +82,55 @@ class ExcelImportCubit extends Cubit<ExcelImportState> {
     }
   }
 
-  Future<void> _processFileInIsolate(Uint8List bytes) async {
-    final receivePort = ReceivePort();
-    print('Process File In Isolate');
+  // Future<void> _processFileInIsolate(Uint8List bytes) async {
+  //   final receivePort = ReceivePort();
+  //   print('Process File In Isolate');
 
-    await Isolate.spawn(
-      _parseExcelData,
-      [receivePort.sendPort, bytes],
-    );
+  //   await Isolate.spawn(
+  //     _parseExcelData,
+  //     [receivePort.sendPort, bytes],
+  //   );
 
-    await for (var message in receivePort) {
-      if (message is List<Employee>) {
-        await _synchronized.synchronized(() async {
-          for (var i = 0; i < message.length; i += _chunkSize) {
-            final chunk = message.sublist(
-                i,
-                i + _chunkSize > message.length
-                    ? message.length
-                    : i + _chunkSize);
-            _allEmployees.addAll(chunk);
+  //   await for (var message in receivePort) {
+  //     if (message is List<Employee>) {
+  //       await _synchronized.synchronized(() async {
+  //         for (var i = 0; i < message.length; i += _chunkSize) {
+  //           final chunk = message.sublist(
+  //               i,
+  //               i + _chunkSize > message.length
+  //                   ? message.length
+  //                   : i + _chunkSize);
+  //           _allEmployees.addAll(chunk);
 
-            print('ADD Employee');
+  //           print('ADD Employee');
 
-            await Future.delayed(Duration(milliseconds: 50));
-          }
-        });
-        break;
+  //           await Future.delayed(Duration(milliseconds: 50));
+  //         }
+  //       });
+  //       break;
+  //     }
+  //   }
+  // }
+
+  static Future<List<Employee>> _parseExcelInBackground(List<int> bytes) async {
+    print('PRE DECODE EXCEL');
+
+    final excel = Excel.decodeBytes(bytes);
+    List<Employee> employees = [];
+    print('LOAD ALL ITEMS FROM EXCEL: $excel');
+
+    for (var table in excel.tables.keys) {
+      var sheet = excel.tables[table]!;
+      for (var row in sheet.rows.skip(1)) {
+        employees.add(Employee(
+          id: row[0]?.value.toString() ?? '',
+          name: row[1]?.value.toString() ?? '',
+          email: row[2]?.value.toString() ?? '',
+          position: row[3]?.value.toString() ?? '',
+        ));
       }
     }
+    return employees;
   }
 
   static void _parseExcelData(List<dynamic> args) {

@@ -12,7 +12,7 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Cấu hình cửa sổ
-  setWindowTitle('Quản lý nhân viên');
+  setWindowTitle('Quản lý đồng bộ nhân viên');
   setWindowMinSize(const Size(800, 600));
   setWindowFrame(const Rect.fromLTWH(
     100,
@@ -39,7 +39,7 @@ class MyApp extends StatelessWidget {
       ),
       home: BlocProvider(
         create: (context) => ExcelImportCubit(),
-        child: EmployeeScreen(),
+        child: EmployeeTable(),
       ),
     );
   }
