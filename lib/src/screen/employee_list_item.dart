@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:read_excel/extensions.dart';
 
 import 'employee.dart';
 
@@ -54,7 +55,56 @@ class EmployeeListItem extends StatelessWidget {
             padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
             child: Text(
-              employee.position,
+              employee.gender,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 3,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(
+              employee.address,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 1,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(
+              employee.cccd,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 1,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(
+              employee.efectiveStartDate.formatToYmd(),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 1,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(
+              employee.efectiveEndDate.formatToYmd(),
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),

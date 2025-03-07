@@ -3,9 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:window_size/window_size.dart';
 
-import 'cubit/excel_action_cubit.dart';
-import 'employee_screen.dart';
-import 'employee_table.dart';
+import 'src/bloc/automation_bloc.dart';
+import 'src/screen/employee_screen.dart';
 import 'system_tray.dart';
 
 void main() {
@@ -38,8 +37,8 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: BlocProvider(
-        create: (context) => ExcelImportCubit(),
-        child: EmployeeTable(),
+        create: (context) => AutomationBloc(),
+        child: EmployeeScreen(),
       ),
     );
   }
