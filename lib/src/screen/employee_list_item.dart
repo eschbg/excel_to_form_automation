@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:read_excel/extensions.dart';
 
-import 'employee.dart';
+import '../model/employee.dart';
 
 class EmployeeListItem extends StatelessWidget {
   final Employee employee;
@@ -21,6 +21,8 @@ class EmployeeListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isSuccess = employee.status != null && employee.status!.isSuccess;
+
     return Row(
       mainAxisSize: MainAxisSize.max,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -62,7 +64,19 @@ class EmployeeListItem extends StatelessWidget {
           ),
         ),
         Flexible(
-          flex: 3,
+          flex: 2,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(
+              employee.birthDay.formatToYmd(),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 4,
           child: Container(
             padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
@@ -75,7 +89,7 @@ class EmployeeListItem extends StatelessWidget {
           ),
         ),
         Flexible(
-          flex: 1,
+          flex: 2,
           child: Container(
             padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
@@ -87,7 +101,7 @@ class EmployeeListItem extends StatelessWidget {
           ),
         ),
         Flexible(
-          flex: 1,
+          flex: 2,
           child: Container(
             padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
@@ -99,7 +113,7 @@ class EmployeeListItem extends StatelessWidget {
           ),
         ),
         Flexible(
-          flex: 1,
+          flex: 2,
           child: Container(
             padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
@@ -113,7 +127,6 @@ class EmployeeListItem extends StatelessWidget {
         Flexible(
           flex: 2,
           child: Container(
-            padding: const EdgeInsets.all(12.0),
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -125,13 +138,35 @@ class EmployeeListItem extends StatelessWidget {
                   onPressed: onDelete,
                 ),
                 IconButton(
-                  icon: Icon(
-                      employee.isSent ? Icons.cloud_done : Icons.cloud_upload),
-                  color: employee.isSent ? Colors.green : Colors.blue,
-                  onPressed: onSend,
+                  icon: Icon(isSuccess ? Icons.cloud_done : Icons.cloud_upload),
+                  color: isSuccess ? Colors.green : Colors.blue,
+                  onPressed: isSuccess ? null : onSend,
                 ),
               ],
             ),
+          ),
+        ),
+        Flexible(
+          flex: 1,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.circle_rounded,
+              size: 14,
+              color: isSuccess ? Colors.green : Colors.orange,
+              shadows: <Shadow>[Shadow(color: Colors.grey, blurRadius: 10.0)],
+            ),
+          ),
+        ),
+        Flexible(
+          flex: 3,
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            alignment: Alignment.center,
+            child: Text(employee.status != null && employee.status!.isSuccess
+                ? 'Đăng ký thành công'
+                : (employee.status?.errMsg ?? '')),
           ),
         ),
       ],

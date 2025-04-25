@@ -13,6 +13,11 @@ final class Import extends AutomationEvent {}
 
 final class Export extends AutomationEvent {}
 
+final class SetTimeSchedule extends AutomationEvent {
+  final String time;
+  const SetTimeSchedule(this.time);
+}
+
 final class LoadMore extends AutomationEvent {
   final String searchText;
 
@@ -24,9 +29,13 @@ final class LoadMore extends AutomationEvent {
 final class SendData extends AutomationEvent {
   final String url;
   final List<Employee> employees;
+  final bool isSentAll;
+  final bool isSchedule;
   const SendData({
     required this.url,
     required this.employees,
+    this.isSentAll = false,
+    this.isSchedule = false,
   });
 }
 

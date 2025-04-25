@@ -1,17 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPref {
-  static String valueSharedPreferences = 'path';
-
   // Write DATA
-  static Future<bool> saveData(value) async {
+  static Future<bool> saveData(key, value) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
-    return await sharedPreferences.setInt(valueSharedPreferences, value);
+    return await sharedPreferences.setString(key, value);
   }
 
 // Read Data
-  static Future getData() async {
+  static Future getData(key) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
-    return sharedPreferences.getInt(valueSharedPreferences);
+    return sharedPreferences.getString(key);
   }
 }

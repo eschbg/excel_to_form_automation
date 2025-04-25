@@ -15,10 +15,12 @@ final class AutomationSuccess extends AutomationState {
   final ActionType type;
   final List<Employee> data;
   final String itemPerPage;
+  final String countStatusData;
   const AutomationSuccess(
     this.type, {
     this.data = const [],
     this.itemPerPage = '0/0',
+    this.countStatusData = '',
   });
 }
 
@@ -38,6 +40,7 @@ enum ActionType {
   delete,
   edit,
   upload,
+  schedule,
   loadMore;
 
   String toString() {

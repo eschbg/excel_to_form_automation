@@ -1,16 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_platform_alert/flutter_platform_alert.dart';
 import 'package:read_excel/src/bloc/automation_bloc.dart';
 
-import 'package:read_excel/src/screen/employee.dart';
+import 'package:read_excel/src/model/employee.dart';
+import 'package:read_excel/src/shared_pref.dart';
 import 'package:windows_toast/windows_toast.dart';
 
 import '../constants.dart';
 import 'employee_dialog.dart';
 import 'employee_list_item.dart';
+import 'restart.dart';
 
 class EmployeeScreen extends StatefulWidget {
   const EmployeeScreen({super.key});
@@ -21,6 +25,8 @@ class EmployeeScreen extends StatefulWidget {
 
 class _EmployeeScreenState extends State<EmployeeScreen>
     with AutomaticKeepAliveClientMixin {
+  static const Color _bgColor = Color(0xFFF5EFFF);
+
   final _urlFormKey = GlobalKey<FormState>();
   String url =
       'https://m.luxshare-ict.com/hr/idcardcollectforvnintroducer.html?introducer=Galaxy-241112';
@@ -47,10 +53,35 @@ class _EmployeeScreenState extends State<EmployeeScreen>
     }
   }
 
+  void _scheduleNextRun() async {
+    final timeSchedule =
+        (await SharedPref.getData(SharedConstants.time) ?? '0').toString();
+
+    final now = DateTime.now();
+    var timeConfig =
+        DateTime(now.year, now.month, now.day, int.parse(timeSchedule), 00);
+
+    // Nếu hiện tại đã qua thời gian cấu hình, lên lịch cho ngày mai
+    if (now.isAfter(timeConfig)) {
+      timeConfig = timeConfig.add(Duration(days: 1));
+    }
+
+    final durationUntilNextRun = timeConfig.difference(now);
+
+    // Lên lịch gửi dữ liệu
+    _scheduledTask = Timer(durationUntilNextRun, () {
+      context
+          .read<AutomationBloc>()
+          .add(SendData(url: url, employees: [], isSchedule: true));
+      _scheduleNextRun(); // Lên lịch cho lần gửi tiếp theo
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_scrollListener);
+    _scheduleNextRun();
   }
 
   @override
@@ -66,7 +97,9 @@ class _EmployeeScreenState extends State<EmployeeScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: _bgColor,
       appBar: AppBar(
+        backgroundColor: _bgColor,
         title: Text('Quản lý đồng bộ nhân viên'.toUpperCase()),
         actions: [
           iconAction(
@@ -88,6 +121,16 @@ class _EmployeeScreenState extends State<EmployeeScreen>
             },
           ),
           SizedBox(width: 10),
+          iconAction(
+            '',
+            Icon(Icons.settings, color: Colors.blue),
+            () {
+              _editTimeSchedule((value) {
+                context.read<AutomationBloc>().add(SetTimeSchedule(value));
+              });
+            },
+          ),
+          SizedBox(width: 10),
         ],
       ),
       body: Center(
@@ -99,7 +142,6 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                   _itemPerPage = state.itemPerPage;
                   _dataDisplay.clear();
                   _dataDisplay.addAll(state.data);
-                  print('DATA Screen: ${state.data[0]}');
                 });
               }
               if (state.type == ActionType.add ||
@@ -110,14 +152,41 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                     toastColor: Colors.green,
                     textStyle: TextStyle(color: Colors.white));
               }
+              if (state.type == ActionType.upload) {
+                FlutterPlatformAlert.showAlert(
+                  windowTitle: 'Thông báo!',
+                  text: state.countStatusData,
+                  alertStyle: AlertButtonStyle.ok,
+                  iconStyle: IconStyle.information,
+                );
+              }
+              if (state.type == ActionType.schedule) {
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: Text('Thông báo'),
+                    content: Text(
+                        'Bạn cần khởi động lại ứng dụng sau khi cài đặt thời gian!'),
+                    actions: [
+                      ElevatedButton(
+                          onPressed: () {
+                            WidgetRebirth.createRebirth(context: context);
+                          },
+                          child: Text('Khởi động lại'))
+                    ],
+                  ),
+                );
+              }
             } else if (state is AutomationError) {
               if (state.type == ActionType.add ||
                   state.type == ActionType.edit ||
                   state.type == ActionType.delete) {
-                WindowsToast.show(
-                    '${state.type.toString()} thất bại!', context, 30,
-                    toastColor: Colors.red,
-                    textStyle: TextStyle(color: Colors.white));
+                FlutterPlatformAlert.showAlert(
+                  windowTitle: 'Thông báo!',
+                  text: '${state.type.toString()} thất bại!',
+                  alertStyle: AlertButtonStyle.ok,
+                  iconStyle: IconStyle.information,
+                );
               }
             }
           },
@@ -158,8 +227,8 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        url != null && url!.trim().isNotEmpty
-                                            ? url!
+                                        url.trim().isNotEmpty
+                                            ? url
                                             : 'Nhập URL',
                                         style: TextStyle(fontSize: 16),
                                       ),
@@ -198,17 +267,24 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: IntrinsicWidth(
-                          child: iconAction(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '*** Những nhân viên có trạng thái gửi THÀNH CÔNG sẽ không được thực hiện lại ở những lần tiếp theo ***',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          iconAction(
                             'Thêm nhân viên',
                             Icon(Icons.add, color: Colors.blue),
                             () {
                               _actionsEmployee(context, employee: null);
                             },
                           ),
-                        ),
+                        ],
                       ),
                     ),
                     Container(
@@ -230,24 +306,36 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                             child: _labelTable(FieldNameConstants.gender),
                           ),
                           Flexible(
-                            flex: 3,
+                            flex: 2,
+                            child: _labelTable(FieldNameConstants.birthday),
+                          ),
+                          Flexible(
+                            flex: 4,
                             child: _labelTable(FieldNameConstants.address),
                           ),
                           Flexible(
-                            flex: 1,
+                            flex: 2,
                             child: _labelTable(FieldNameConstants.cccd),
                           ),
                           Flexible(
-                            flex: 1,
+                            flex: 2,
                             child: _labelTable(FieldNameConstants.startDate),
                           ),
                           Flexible(
-                            flex: 1,
+                            flex: 2,
                             child: _labelTable(FieldNameConstants.expireDate),
                           ),
                           Flexible(
                             flex: 2,
                             child: _labelTable(FieldNameConstants.action),
+                          ),
+                          Flexible(
+                            flex: 1,
+                            child: _labelTable(FieldNameConstants.isSent),
+                          ),
+                          Flexible(
+                            flex: 3,
+                            child: _labelTable(FieldNameConstants.note),
                           ),
                         ],
                       ),
@@ -269,9 +357,17 @@ class _EmployeeScreenState extends State<EmployeeScreen>
                               itemCount: _dataFilter.length,
                               itemBuilder: (context, index) {
                                 final employee = _dataFilter[index];
+                                final isLastElement =
+                                    index == _dataFilter.length - 1;
+                                final isEven = index % 2 == 0;
                                 return Container(
+                                  margin: EdgeInsets.only(
+                                      bottom: isLastElement ? 50 : 0),
                                   padding: EdgeInsets.only(bottom: 8),
                                   decoration: BoxDecoration(
+                                    color: isEven
+                                        ? Color(0xFFF5F5F5)
+                                        : Colors.white,
                                     border: Border(
                                         bottom: BorderSide(
                                             color: Color(0xFFEAEAEA))),
@@ -328,7 +424,40 @@ class _EmployeeScreenState extends State<EmployeeScreen>
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () {
+          if (url.trim().isEmpty) {
+            showDialog(
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  title: Text(
+                    'Thông báo',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  content: Text(
+                    'Bạn phải nhập URL',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.red,
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Đồng ý'),
+                    ),
+                  ],
+                );
+              },
+            );
+          } else {
+            context
+                .read<AutomationBloc>()
+                .add(SendData(url: url, employees: [], isSentAll: true));
+          }
+        },
         tooltip: 'Gửi tất cả',
         child: Icon(
           Icons.send,
@@ -392,6 +521,7 @@ class _EmployeeScreenState extends State<EmployeeScreen>
               Employee(
                 name: '',
                 gender: '',
+                birthDay: DateTime.now(),
                 address: '',
                 cccd: '',
                 efectiveStartDate: DateTime.now(),
@@ -444,6 +574,76 @@ class _EmployeeScreenState extends State<EmployeeScreen>
               if (_urlFormKey.currentState!.validate()) {
                 Navigator.pop(context);
                 onSave(urlController.text);
+              }
+            },
+            child: Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  //Edit Time Schedule
+  void _editTimeSchedule(Function(String) onSave) async {
+    final scheduleController = TextEditingController();
+
+    final timerSchedulePref =
+        await SharedPref.getData(SharedConstants.time) ?? '0';
+    final timeToInt = int.parse(timerSchedulePref);
+    final conditionDescription = timeToInt >= 0 && timeToInt <= 10
+        ? 'Sáng'
+        : timeToInt > 10 && timeToInt <= 14
+            ? 'Trưa'
+            : timeToInt > 14 && timeToInt <= 18
+                ? 'Chiều'
+                : 'Tối';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Chỉnh sửa thời gian (theo giờ)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Thời gian đồng bộ lên hệ thống hiện tại lúc: ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w200,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                Text(
+                  '$timerSchedulePref giờ $conditionDescription',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w400,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            Form(
+              key: _urlFormKey,
+              child: TextFormField(
+                controller: scheduleController,
+                decoration: InputDecoration(labelText: 'Nhập thời gian'),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (value) => value!.isEmpty ? 'Vui lòng nhập' : null,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (_urlFormKey.currentState!.validate()) {
+                Navigator.pop(context);
+                onSave(scheduleController.text);
               }
             },
             child: Text('Lưu'),

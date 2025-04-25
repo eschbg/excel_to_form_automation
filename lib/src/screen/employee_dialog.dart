@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:read_excel/extensions.dart';
 
-import 'employee.dart';
+import '../model/employee.dart';
 
 class EmployeeEditDialog extends StatefulWidget {
   final Employee employee;
@@ -22,6 +22,7 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
   TextEditingController cccdController = TextEditingController();
   ValueNotifier<DateTime>? effectiveStartDate;
   ValueNotifier<DateTime>? effectiveEndDate;
+  ValueNotifier<DateTime>? birthDay;
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
     effectiveStartDate =
         ValueNotifier<DateTime>(widget.employee.efectiveStartDate);
     effectiveEndDate = ValueNotifier<DateTime>(widget.employee.efectiveEndDate);
+    birthDay = ValueNotifier<DateTime>(widget.employee.birthDay);
   }
 
   @override
@@ -55,6 +57,20 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
               validator: (value) =>
                   value!.isEmpty ? 'Vui lòng nhập giới tính' : null,
             ),
+            _effectiveDateField(
+              onTap: () async {
+                birthDay?.value = await showDatePicker(
+                      context: context,
+                      initialDate: widget.employee.birthDay,
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime.now(),
+                    ) ??
+                    widget.employee.birthDay;
+                setState(() {});
+              },
+              label: 'Ngày sinh',
+              value: birthDay!.value.formatToYmd(),
+            ),
             TextFormField(
               controller: addressController,
               decoration: InputDecoration(labelText: 'Địa chỉ'),
@@ -72,8 +88,8 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
                 effectiveStartDate?.value = await showDatePicker(
                       context: context,
                       initialDate: widget.employee.efectiveStartDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2040),
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime.now(),
                     ) ??
                     widget.employee.efectiveStartDate;
                 setState(() {});
@@ -87,7 +103,7 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
                       context: context,
                       initialDate: widget.employee.efectiveEndDate,
                       firstDate: DateTime(2020),
-                      lastDate: DateTime(2040),
+                      lastDate: DateTime(2100),
                     ) ??
                     widget.employee.efectiveEndDate;
                 setState(() {});
@@ -109,11 +125,12 @@ class _EmployeeEditDialogState extends State<EmployeeEditDialog> {
               widget.onSave(Employee(
                 name: nameController.text,
                 gender: genderController.text,
+                birthDay: birthDay!.value,
                 address: addressController.text,
                 cccd: cccdController.text,
                 efectiveStartDate: effectiveStartDate!.value,
                 efectiveEndDate: effectiveEndDate!.value,
-                isSent: widget.employee.isSent,
+                status: widget.employee.status,
               ));
               Navigator.pop(context);
             }
